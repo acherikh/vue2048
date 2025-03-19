@@ -38,5 +38,5 @@ deploy-prod:
   stage: deploy
   script:
     - npm install -g vercel
-    - vercel --token $VERCEL_TOKEN --prod --yes --confirm --project-id $VERCEL_PROJECT_ID --org-id $VERCEL_ORG_ID
+    - vercel --token $VERCEL_TOKEN --prod
   when: manual
