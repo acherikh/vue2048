@@ -1,0 +1,43 @@
+variables:
+  VERCEL_TOKEN: "FO6yiaIiT64pGRE1hiLiuTat"
+  VERCEL_ORG_ID: "kRrNZi4TeMSIIDBZrddWRp0G"
+  VERCEL_PROJECT_ID: "prj_11FAW7n8r2LfSRhUtS3nqvGXhGko"
+
+stages:
+  - build
+  - deploy
+
+default:
+  image: node:latest
+  cache: &global_cache
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+      - node_modules/
+    policy: pull
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@latest-10 --activate
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install
+
+build-package:
+  stage: build
+  cache:
+    <<: *global_cache
+    policy: pull-push
+  script:
+    - pnpm build
+  artifacts:
+    paths:
+      - dist/
+
+deploy-prod:
+  stage: deploy
+  script:
+    - npm install -g vercel
+    - vercel --token $VERCEL_TOKEN --prod --yes --confirm --project-id $VERCEL_PROJECT_ID --org-id $VERCEL_ORG_ID
+  when:
+    - manual
