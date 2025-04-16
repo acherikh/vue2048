@@ -1,0 +1,149 @@
+name: Vue2048 CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      run_static_analysis:
+        description: "Exécuter les analyses statiques et tests"
+        type: boolean
+        default: true
+      deploy_to_environments:
+        description: "Déployer sur les environnements"
+        type: boolean
+        default: true
+  schedule:
+    - cron: "0 8 * * 1" # Tous les lundis à 8h
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_to_environments == 'true' || github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+          cache: "pnpm"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build application
+        run: pnpm build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vue2048-build
+          path: dist/
+          retention-days: ${{ github.ref == 'refs/heads/main' && 7 || 1 }}
+
+  static_analysis:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_static_analysis == 'true') }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+          cache: "pnpm"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run linter
+        run: pnpm lint
+
+      - name: Check types
+        run: pnpm type-check
+
+      - name: Run tests
+        run: pnpm test:unit
+
+  deploy_qa:
+    runs-on: ubuntu-latest
+    needs: [build, static_analysis]
+    if: ${{ needs.build.outputs.should_deploy == 'true' }}
+    environment:
+      name: qa
+      url: https://stapp-vue2048-qa.azurestaticapps.net
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: vue2048-build
+          path: dist
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install SWA CLI
+        run: npm install -g @azure/static-web-apps-cli
+
+      - name: Deploy to QA
+        run: |
+          swa deploy \
+            --app-location dist \
+            --deployment-token ${{ secrets.QA_DEPLOYMENT_TOKEN }} \
+            --env production \
+            --app-name stapp-vue2048-qa
+
+  deploy_prod:
+    runs-on: ubuntu-latest
+    needs: [deploy_qa]
+    if: ${{ needs.build.outputs.should_deploy == 'true' }}
+    environment:
+      name: production
+      url: https://stapp-vue2048-prod.azurestaticapps.net
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: vue2048-build
+          path: dist
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+
+      - name: Install SWA CLI
+        run: npm install -g @azure/static-web-apps-cli
+
+      - name: Deploy to Production
+        run: |
+          swa deploy \
+            --app-location dist \
+            --deployment-token ${{ secrets.PROD_DEPLOYMENT_TOKEN }} \
+            --env production \
+            --app-name stapp-vue2048-prod
