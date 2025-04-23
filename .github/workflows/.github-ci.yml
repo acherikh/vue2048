@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: vue2048-build
-          path: dist/
+          path: ../../dist/
           retention-days: ${{ github.ref == 'refs/heads/main' && 7 || 1 }}
 
   static_analysis:
